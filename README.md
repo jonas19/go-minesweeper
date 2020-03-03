@@ -1,39 +1,44 @@
-# Goland Minesweeper coding challenge
+# Golang Minesweeper coding challenge
 
-A super simple minesweeper done in Golang
+A minesweeper done in Golang
+
+## Build and Run with Docker
+
+docker-compose up
 
 ## API endpoints
 
-* **/** - Gets API version
+* **127.0.0.1/** - [Get] Gets API version
 
-* **/game** - Start a new game with default parameters
+* **127.0.0.1/healthcheck** - [Get] Perform a basic app health check
 
-* **/game/{gameID}/board** - Loads and retrieves game info
+* **127.0.0.1/game** - [Post] Start a new game with default parameters
 
-* **/game/{gameID}/flag/{cellID}/question** - Flags a cell with a question mark or unflags 
+* **127.0.0.1/game/{gameID}/board** - [Post] Loads and retrieves game info
+
+* **127.0.0.1/game/{gameID}/flag/{cellID}/question** - [Post] Flags a cell with a question mark or unflags 
 it
 
-* **/game/{gameID}/flag/{cellID}/flag** - Flags a cell with a red flag or unflags it
+* **127.0.0.1/game/{gameID}/flag/{cellID}/flag** - [Post] Flags a cell with a red flag or unflags it
 
-* **/game/{gameID}/click/{cellID}** - Clicks on a cell
+* **127.0.0.1/game/{gameID}/click/{cellID}** - [Post] Clicks on a cell
 
-## Documentation
+## Run tests within Docker
 
-The code itself is quite self explanatory; clear and mnemotechnic methods and variables names were use.
+docker exec -it app go test $(go list ./... ) -v
 
-## Persistency
+## Some thoughts
 
-In a true world app, Redis DB should be use in order to achive speed.
-For the sake of simplicity for this project, game data is written to a file.
+Instead of creating a matix of [rows][cols], I decided to use an array of rows*cols lenght.
+I found it funny to experiment with this way of doing the app.
 
-## GO routines
+One of the challenges was to use the go routines in order to speed up the cell revealing proceess, specially for very big board.
 
-When starting a new game and definig the size of the board, go routines where used in order to show how they can be implemented in order to make concurrent proccesing with Go.    
+## Unit testing
 
-## Testing
-
-Some simple unit test were implemented in order to show how it should be done in Go
+Done just a few unit testing just to show how will I do it in Go lang.
+If requested, could be done to grant a 80% coverage, which I think is an acceptable threshold.
 
 ## Author
 
-* **Jonas Garbovetsky** - *Initial work* - [PurpleBooth](https://github.com/jonas19)
+* **Jonas Garbovetsky** - *Initial work* - [Jonas19](https://github.com/jonas19)
