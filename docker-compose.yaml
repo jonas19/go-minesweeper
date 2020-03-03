@@ -1,0 +1,23 @@
+version: "2.1"
+
+services:
+  app:
+    build: .
+    container_name: app 
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/go/src/github.com/jonas19/minesweeper/
+    command: "go run main.go"
+    links :
+      - db
+  db:
+     image: redis:alpine
+     container_name: redis
+     healthcheck:
+        test: ["CMD", "redis-cli","ping"]
+        interval: 30s
+        timeout: 10s
+        retries: 3
+     ports:
+     - "6379:6379"

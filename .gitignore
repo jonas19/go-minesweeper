@@ -1,0 +1,9 @@
+.gitignore
+.history/
+.DS_Store/
+.vscode/
+vendor/
+cov.out/
+cov.out
+*.exe
+report.json
