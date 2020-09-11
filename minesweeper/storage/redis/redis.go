@@ -36,6 +36,8 @@ func Start() {
 
 //save a game
 func Persist(game models.Game) (status bool) {
+	Start()
+
 	json, err := json.Marshal(game)
 	if err != nil {
 		return false
@@ -51,6 +53,8 @@ func Persist(game models.Game) (status bool) {
 
 //get game data
 func LoadGame(gameID string) (status bool, data string) {
+	Start()
+
 	data, err := redis.String(client.Do("GET", gameID))
 
 	log := logrus.StandardLogger()
