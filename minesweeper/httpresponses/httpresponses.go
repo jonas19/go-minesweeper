@@ -10,7 +10,7 @@ type responseStruct struct {
 	Message string `json:"message"`
 }
 
-func SendResponse(w http.ResponseWriter, status string, message string) {
+func SendJSONResponse(w http.ResponseWriter, status string, message string) {
 	var statusCode int
 	if status == "ok" {
 		statusCode = http.StatusOK
@@ -31,4 +31,17 @@ func SendResponse(w http.ResponseWriter, status string, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	w.Write([]byte(json))
+}
+
+func SendTextResponse(w http.ResponseWriter, status string, message string) {
+	var statusCode int
+	if status == "ok" {
+		statusCode = http.StatusOK
+	} else {
+		statusCode = http.StatusBadRequest
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(statusCode)
+	w.Write([]byte(message))
 }

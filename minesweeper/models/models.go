@@ -1,11 +1,12 @@
 package models
 
 type Cell struct {
-	CellID      int
-	IsAMine     bool
-	IsClicked   bool
-	IsFlagged   bool
-	FlaggedWith string
+	CellID           int
+	IsAMine          bool
+	IsClicked        bool
+	IsFlagged        bool
+	FlaggedWith      string
+	MinesSorrounding int
 }
 
 type CellGrid []Cell

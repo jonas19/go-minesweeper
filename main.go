@@ -56,6 +56,9 @@ func main() {
 	//get current app version
 	r.HandleFunc("/", routes.ShowVersion).Methods(http.MethodGet)
 
+	//retrieve a saved game by game ID and show it graphically
+	r.HandleFunc("/game/{gameID}/board/graph", routes.RetrieveGameGraphically).Methods(http.MethodGet)
+
 	log.Infoln("Starting API...")
 	log.Fatalln(http.ListenAndServe(":"+usePort, r))
 }

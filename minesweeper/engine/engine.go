@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"github.com/sirupsen/logrus"
 
 	"github.com/jonas19/minesweeper/minesweeper/consts"
 	"github.com/jonas19/minesweeper/minesweeper/models"
@@ -101,6 +102,36 @@ func (game *Services) GetAGameByID(gameID string) (status string, message string
 	return status, message
 }
 
+func (game *Services) GetGraphicallyAGameByID(gameID string) (status string, message string) {
+	ok := game.obtainGameInfo(gameID)
+	if !ok {
+		return "error", "Seems data was not properly saved, unable to load game"
+	}
+
+	board := ""
+	cols := 0
+	for cell := range game.GameService.Board {
+		if game.GameService.Board[cell].FlaggedWith == "question" {
+			board += " ? "
+		} else if game.GameService.Board[cell].FlaggedWith == "flag" {
+			board += " ! " 
+		} else if game.GameService.Board[cell].IsClicked {
+			board += " " + strconv.Itoa(game.GameService.Board[cell].MinesSorrounding) + " "
+		} else {
+			board += " - "
+		}
+		
+		cols++
+		if cols == game.GameService.Cols {
+			board += "\n"
+			cols = 0
+		}
+	}
+
+	return status, board
+}
+
+
 func (game *Services) FlagACell(gameID string, cellIDstr string, with string) (status string, message string) {
 	cellID, err := strconv.Atoi(cellIDstr)
 	if err != nil {
@@ -146,24 +177,28 @@ func (game *Services) ClickACell(gameID string, cellIDstr string) (status string
 		return "error", message
 	}
 
-	game.GameService.Board[cellID].IsClicked = true
-	game.GameService.Clicks++
+	//game.GameService.Board[cellID].IsClicked = true
+	//game.GameService.Clicks++
 
 	var cellsToReveal string
 	if game.GameService.Board[cellID].IsAMine {
+		game.GameService.Board[cellID].IsClicked = true
+		game.GameService.Clicks++
 		game.GameService.Status = "Lost"
 	} else {
 		var wg sync.WaitGroup
 		cellsToRevealArr := make(map[int]bool)
-		cellsAlreadyChecked := make(map[int]bool)
-
+		
 		cellsToRevealArr[cellID] = true
 
 		wg.Add(1)
-		game.revealAdjacent(cellID, cellsToRevealArr, cellsAlreadyChecked, &wg)
+		game.revealAdjacent(cellID, cellsToRevealArr, &wg)
 		wg.Wait()
 		s, _ := json.Marshal(cellsToRevealArr)
 		cellsToReveal = strings.Trim(string(s), "[]")
+
+		game.GameService.Board[cellID].IsClicked = true
+		game.GameService.Clicks++
 	}
 
 	game.checkIfWon()
@@ -233,7 +268,11 @@ func (game *Services) createBoard() {
 	game.GameService.Board = make(models.CellGrid, game.GameService.CantCells)
 
 	for cell := range game.GameService.Board {
-		game.GameService.Board[cell].CellID = cell
+		game.GameService.Board[cell].CellID           = cell
+		game.GameService.Board[cell].IsClicked        = false
+		game.GameService.Board[cell].IsFlagged        = false
+		game.GameService.Board[cell].IsAMine          = false
+		game.GameService.Board[cell].MinesSorrounding = 0
 	}
 }
 
@@ -282,40 +321,38 @@ func (game *Services) isCellOnRange(cellID int) (ok bool, response string) {
 	return true, ""
 }
 
-func (game *Services) revealAdjacent(cellID int, revealedCells map[int]bool, cellsAlreadyChecked map[int]bool, wg *sync.WaitGroup) {
+func (game *Services) revealAdjacent(cellID int, revealedCells map[int]bool, wg *sync.WaitGroup) {
 	defer wg.Done()
-
-	lock.Lock()
-	if cellsAlreadyChecked[cellID] {
-		lock.Unlock()
+	log := logrus.StandardLogger()
+	log.Infoln("Check A " + strconv.Itoa(cellID))
+	
+	if game.GameService.Board[cellID].IsClicked || game.GameService.Board[cellID].IsFlagged {
 		return
 	}
-	cellsAlreadyChecked[cellID] = true
-	lock.Unlock()
+	
 	//bring all adjacent cells
 	adjacents := game.getAdjacentCells(cellID)
 
-	//if all adjacents are empty click them
-	hasNearMines := false
 	for cell := range adjacents {
 		if game.GameService.Board[adjacents[cell]].IsAMine {
-			hasNearMines = true
-			break
+			game.GameService.Board[cellID].MinesSorrounding++
 		}
 	}
-
-	if !hasNearMines {
+	
+	log.Infoln("MinesSorrounding " + strconv.Itoa(game.GameService.Board[cellID].MinesSorrounding))
+	if game.GameService.Board[cellID].MinesSorrounding == 0 {
 		lock.Lock()
 		if !revealedCells[cellID] {
 			revealedCells[cellID] = true
 		}
 		lock.Unlock()
 		for cell := range adjacents {
+			log.Infoln("Check B" + strconv.Itoa(adjacents[cell]))
 			if game.GameService.Board[adjacents[cell]].IsClicked == false || game.GameService.Board[adjacents[cell]].IsFlagged == false {
 				game.GameService.Board[adjacents[cell]].IsClicked = true
 				game.GameService.RevealedCells++
 				wg.Add(1)
-				go game.revealAdjacent(adjacents[cell], revealedCells, cellsAlreadyChecked, wg)
+				go game.revealAdjacent(adjacents[cell], revealedCells, wg)
 			}
 		}
 	}
