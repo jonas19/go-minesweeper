@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"github.com/sirupsen/logrus"
 
 	"github.com/jonas19/minesweeper/minesweeper/consts"
 	"github.com/jonas19/minesweeper/minesweeper/models"
@@ -80,47 +79,58 @@ func (game *Services) StartANewGame(rows string, cols string, mines string) (sta
 
 	//generate a random game id to identify the game
 	game.GameService.GameID = strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond), 10) + strconv.Itoa(rand.Intn(10000))
-
+	
 	//save the game to the db
 	ok = redis.Persist(game.GameService)
 	if !ok {
 		return "error", "Unable to save the game"
 	}
 
-	return "ok", "ID: " + game.GameService.GameID + "," +
-		"rows: " + strconv.Itoa(game.GameService.Rows) + "," +
-		"cols: " + strconv.Itoa(game.GameService.Cols) + "," +
-		"mines: " + strconv.Itoa(game.GameService.Mines) + ","
+	return "ok", game.GameService.GameID
 }
 
-func (game *Services) GetAGameByID(gameID string) (status string, message string) {
-	ok, message := redis.LoadGame(gameID)
+func (game *Services) GetJSONGameByID(gameID string) (status string, message string) {
+	ok, message := game.obtainGameInfo(gameID)
 	if !ok {
 		return "error", message
 	}
 
-	return status, message
+	s, _ := json.Marshal(game)
+	
+	return "ok", string(s)
 }
 
-func (game *Services) GetGraphicallyAGameByID(gameID string) (status string, message string) {
-	ok := game.obtainGameInfo(gameID)
+func (game *Services) GetGraphicallyAGameByID(gameID string, mode string) (status string, message string) {
+	ok, message := game.obtainGameInfo(gameID)
 	if !ok {
-		return "error", "Seems data was not properly saved, unable to load game"
+		return "error", message
 	}
 
 	board := ""
 	cols := 0
 	for cell := range game.GameService.Board {
-		if game.GameService.Board[cell].FlaggedWith == "question" {
-			board += " ? "
-		} else if game.GameService.Board[cell].FlaggedWith == "flag" {
-			board += " ! " 
-		} else if game.GameService.Board[cell].IsClicked {
-			board += " " + strconv.Itoa(game.GameService.Board[cell].MinesSorrounding) + " "
-		} else {
-			board += " - "
+		if mode == "bombs" {
+			if game.GameService.Board[cell].IsAMine {
+					board += " * "
+			} else {
+				board += " - "
+			}
+		} else if mode == "current" {
+			if game.GameService.Board[cell].FlaggedWith == "question" {
+				board += " ? "
+			} else if game.GameService.Board[cell].FlaggedWith == "flag" {
+				board += " ! "
+			} else if game.GameService.Board[cell].MinesSurrounding > 0 {
+				board += "  " + strconv.Itoa(game.GameService.Board[cell].MinesSurrounding) + " "
+			} else if game.GameService.Board[cell].IsAMine && game.GameService.Status == "Lost" {
+				board += " * "
+			} else if game.GameService.Board[cell].IsRevealed {
+				board += " _ "
+			} else {
+				board += " - "
+			}
 		}
-		
+
 		cols++
 		if cols == game.GameService.Cols {
 			board += "\n"
@@ -130,7 +140,6 @@ func (game *Services) GetGraphicallyAGameByID(gameID string) (status string, mes
 
 	return status, board
 }
-
 
 func (game *Services) FlagACell(gameID string, cellIDstr string, with string) (status string, message string) {
 	cellID, err := strconv.Atoi(cellIDstr)
@@ -177,18 +186,14 @@ func (game *Services) ClickACell(gameID string, cellIDstr string) (status string
 		return "error", message
 	}
 
-	//game.GameService.Board[cellID].IsClicked = true
-	//game.GameService.Clicks++
-
 	var cellsToReveal string
 	if game.GameService.Board[cellID].IsAMine {
-		game.GameService.Board[cellID].IsClicked = true
+		game.GameService.Board[cellID].IsRevealed = true
 		game.GameService.Clicks++
 		game.GameService.Status = "Lost"
 	} else {
 		var wg sync.WaitGroup
 		cellsToRevealArr := make(map[int]bool)
-		
 		cellsToRevealArr[cellID] = true
 
 		wg.Add(1)
@@ -197,7 +202,6 @@ func (game *Services) ClickACell(gameID string, cellIDstr string) (status string
 		s, _ := json.Marshal(cellsToRevealArr)
 		cellsToReveal = strings.Trim(string(s), "[]")
 
-		game.GameService.Board[cellID].IsClicked = true
 		game.GameService.Clicks++
 	}
 
@@ -219,9 +223,9 @@ func (game *Services) ClickACell(gameID string, cellIDstr string) (status string
 }
 
 func (game *Services) basicChekUpBeforePlaying(gameID string, cellID int) (ok bool, message string) {
-	ok = game.obtainGameInfo(gameID)
+	ok, message = game.obtainGameInfo(gameID)
 	if !ok {
-		return false, "Seems data was not properly saved, unable to load game"
+		return false, message
 	}
 
 	if game.GameService.Status != "playing" {
@@ -233,8 +237,8 @@ func (game *Services) basicChekUpBeforePlaying(gameID string, cellID int) (ok bo
 		return false, message
 	}
 
-	if game.GameService.Board[cellID].IsClicked {
-		return false, "Cell already clicked"
+	if game.GameService.Board[cellID].IsRevealed {
+		return false, "Cell already revealed"
 	}
 
 	return true, ""
@@ -269,10 +273,11 @@ func (game *Services) createBoard() {
 
 	for cell := range game.GameService.Board {
 		game.GameService.Board[cell].CellID           = cell
-		game.GameService.Board[cell].IsClicked        = false
+		game.GameService.Board[cell].IsRevealed       = false
 		game.GameService.Board[cell].IsFlagged        = false
 		game.GameService.Board[cell].IsAMine          = false
-		game.GameService.Board[cell].MinesSorrounding = 0
+		game.GameService.Board[cell].MinesSurrounding = 0
+		game.GameService.Board[cell].Processed		  = false
 	}
 }
 
@@ -295,18 +300,18 @@ func (game *Services) parseVariables(dataToParse string) (ok bool) {
 	return true
 }
 
-func (game *Services) obtainGameInfo(gameID string) (ok bool) {
+func (game *Services) obtainGameInfo(gameID string) (ok bool, message string) {
 	ok, data := redis.LoadGame(gameID)
 	if !ok {
-		return false
+		return false, "Unable to load game"
 	}
 
 	ok = game.parseVariables(data)
 	if !ok {
-		return false
+		return false, "Seems data was not properly saved, unable to load game"
 	}
 
-	return true
+	return true, ""
 }
 
 func (game *Services) isCellOnRange(cellID int) (ok bool, response string) {
@@ -323,34 +328,34 @@ func (game *Services) isCellOnRange(cellID int) (ok bool, response string) {
 
 func (game *Services) revealAdjacent(cellID int, revealedCells map[int]bool, wg *sync.WaitGroup) {
 	defer wg.Done()
-	log := logrus.StandardLogger()
-	log.Infoln("Check A " + strconv.Itoa(cellID))
-	
-	if game.GameService.Board[cellID].IsClicked || game.GameService.Board[cellID].IsFlagged {
+
+	//was processed in this or other time
+	if game.GameService.Board[cellID].Processed  {
 		return
 	}
-	
+
+	game.GameService.Board[cellID].Processed = true
+	game.GameService.Board[cellID].IsRevealed = true 
+	game.GameService.RevealedCells++
+
 	//bring all adjacent cells
 	adjacents := game.getAdjacentCells(cellID)
-
+	
 	for cell := range adjacents {
 		if game.GameService.Board[adjacents[cell]].IsAMine {
-			game.GameService.Board[cellID].MinesSorrounding++
+			game.GameService.Board[cellID].MinesSurrounding++
 		}
 	}
-	
-	log.Infoln("MinesSorrounding " + strconv.Itoa(game.GameService.Board[cellID].MinesSorrounding))
-	if game.GameService.Board[cellID].MinesSorrounding == 0 {
+
+	if game.GameService.Board[cellID].MinesSurrounding == 0 {
 		lock.Lock()
 		if !revealedCells[cellID] {
 			revealedCells[cellID] = true
 		}
 		lock.Unlock()
+	
 		for cell := range adjacents {
-			log.Infoln("Check B" + strconv.Itoa(adjacents[cell]))
-			if game.GameService.Board[adjacents[cell]].IsClicked == false || game.GameService.Board[adjacents[cell]].IsFlagged == false {
-				game.GameService.Board[adjacents[cell]].IsClicked = true
-				game.GameService.RevealedCells++
+			if game.GameService.Board[adjacents[cell]].IsRevealed == false && game.GameService.Board[adjacents[cell]].IsFlagged == false {
 				wg.Add(1)
 				go game.revealAdjacent(adjacents[cell], revealedCells, wg)
 			}
@@ -364,35 +369,48 @@ func (game *Services) checkIfWon() {
 	}
 }
 
-func (game *Services) getAdjacentCells(cellID int) (adjacents []int) {
-	OriginalRowNumber := math.Round(float64(cellID / game.GameService.Rows))
-
-	var cellToCheckIfIsAdjacent []int
-
-	//NW
-	cellToCheckIfIsAdjacent = append(cellToCheckIfIsAdjacent, (cellID-game.GameService.Rows)-1)
-	//N
-	cellToCheckIfIsAdjacent = append(cellToCheckIfIsAdjacent, (cellID - game.GameService.Rows))
-	//NE
-	cellToCheckIfIsAdjacent = append(cellToCheckIfIsAdjacent, (cellID-game.GameService.Rows)+1)
-	//W
-	cellToCheckIfIsAdjacent = append(cellToCheckIfIsAdjacent, (cellID - 1))
-	//E
-	cellToCheckIfIsAdjacent = append(cellToCheckIfIsAdjacent, (cellID + 1))
-	//SW
-	cellToCheckIfIsAdjacent = append(cellToCheckIfIsAdjacent, (cellID+game.GameService.Rows)-1)
-	//S
-	cellToCheckIfIsAdjacent = append(cellToCheckIfIsAdjacent, (cellID + game.GameService.Rows))
-	//SE
-	cellToCheckIfIsAdjacent = append(cellToCheckIfIsAdjacent, (cellID+game.GameService.Rows)+1)
-
-	for _, value := range cellToCheckIfIsAdjacent {
-		if value >= 0 &&
-			value < game.GameService.CantCells &&
-			(OriginalRowNumber-1) == math.Round(float64(value/game.GameService.Rows)) {
-			adjacents = append(adjacents, value)
+func (game *Services) getAdjacentCells(cellID int) (adjacentCells []int) {
+	cellRowNumber   := math.Round(float64(cellID / game.GameService.Rows))
+	topRowNumber    := cellRowNumber - 1
+	bottomRowNumber := cellRowNumber + 1
+	
+	var targetTopRow []int
+	targetTopRow = append(targetTopRow, (cellID-game.GameService.Rows)-1)
+	targetTopRow = append(targetTopRow, (cellID-game.GameService.Rows))
+	targetTopRow = append(targetTopRow, (cellID-game.GameService.Rows)+1)	
+	
+	for _, cell := range targetTopRow {
+		whichRow := math.Round(float64(cell / game.GameService.Rows))
+		if cell >= 0 && 
+		   whichRow == topRowNumber {
+			adjacentCells = append(adjacentCells, cell)
 		}
 	}
 
-	return adjacents
+	var targetSameRow []int
+	targetSameRow = append(targetSameRow, cellID-1)
+	targetSameRow = append(targetSameRow, cellID+1)
+	
+	for _, cell := range targetSameRow {
+		whichRow := math.Round(float64(cell / game.GameService.Rows))
+		if cell > 0 &&
+		   cell <  game.GameService.CantCells &&
+		   whichRow == cellRowNumber {
+			adjacentCells = append(adjacentCells, cell)
+		}
+	}
+
+	var targetBottomRow []int
+	targetBottomRow = append(targetBottomRow, (cellID+game.GameService.Rows)-1)
+	targetBottomRow = append(targetBottomRow, (cellID+game.GameService.Rows))
+	targetBottomRow = append(targetBottomRow, (cellID+game.GameService.Rows)+1)
+	for _, cell := range targetBottomRow {
+		whichRow := math.Round(float64(cell / game.GameService.Rows))
+		if cell <  game.GameService.CantCells &&
+		   whichRow == bottomRowNumber {
+			adjacentCells = append(adjacentCells, cell)
+		}
+	}
+
+	return adjacentCells
 }

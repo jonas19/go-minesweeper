@@ -2,12 +2,12 @@ package redis
 
 import (
 	"encoding/json"
-	"log"
 	"os"
 
 	"github.com/garyburd/redigo/redis"
 	"github.com/jonas19/minesweeper/minesweeper/consts"
 	"github.com/jonas19/minesweeper/minesweeper/models"
+	"github.com/sirupsen/logrus"
 )
 
 var client redis.Conn
@@ -19,15 +19,16 @@ type Services struct {
 
 func Start() {
 	var redisURL string
-	if os.Getenv("REDIS_URL_STUNNEL") != "" {
+
+	if os.Getenv("REDIS_URL") != "" {
+		redisURL = os.Getenv("REDIS_URL")
+	} else if os.Getenv("REDIS_URL_STUNNEL") != "" {
 		redisURL = os.Getenv("REDIS_URL_STUNNEL")[5:]
 	} else {
 		redisURL = consts.RedisAddr
 	}
 
-	log.Println("Trying to connecto to redis on " + redisURL)
 	client, err = redis.Dial("tcp", redisURL)
-
 	if err != nil {
 		panic("Unable to connect to Redis server")
 	}
@@ -40,7 +41,10 @@ func Persist(game models.Game) (status bool) {
 		return false
 	}
 
-	client.Do("SET", game.GameID, []byte(json))
+	log := logrus.StandardLogger()
+	log.Infoln("Persisting " + game.GameID)
+	log.Infoln(string(json))
+	client.Do("SET", game.GameID, string(json))
 
 	return true
 }
@@ -48,8 +52,16 @@ func Persist(game models.Game) (status bool) {
 //get game data
 func LoadGame(gameID string) (status bool, data string) {
 	data, err := redis.String(client.Do("GET", gameID))
+
+	log := logrus.StandardLogger()
+	log.Infoln("Loading " + gameID)
+
 	if err != nil {
+		log.Infoln("error!!")
+		log.Infoln(err)
 		return false, ""
+	} else {
+		log.Infoln(data)
 	}
 
 	return true, data
