@@ -42,8 +42,14 @@ func main() {
 	//new game endpoint
 	r.HandleFunc("/game", routes.StartNewGame).Methods(http.MethodPost)
 
-	//retrieve a saved game by game ID
-	r.HandleFunc("/game/{gameID}/board", routes.RetrieveGame).Methods(http.MethodGet)
+	//retrieve current status of a game
+	r.HandleFunc("/game/{gameID}/board/status", routes.RetrieveGameCurrentStatus).Methods(http.MethodGet)
+
+	//retrieve bomb location of a game
+	r.HandleFunc("/game/{gameID}/board/bombs", routes.RetrieveGameBombs).Methods(http.MethodGet)
+
+	//retrieve save a game in JSON
+	r.HandleFunc("/game/{gameID}/board/json", routes.RetrieveGameJSON).Methods(http.MethodGet)
 
 	//flag/unflag a cell on saved gameID game
 	r.HandleFunc("/game/{gameID}/flag/{cellID}/{with}", routes.FlagCell).Methods(http.MethodPost)

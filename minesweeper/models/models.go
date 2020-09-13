@@ -3,10 +3,11 @@ package models
 type Cell struct {
 	CellID           int    `json:"CellID"`
 	IsAMine          bool   `json:"IsAMine"`
-	IsClicked        bool   `json:"IsClicked"`
+	IsRevealed       bool   `json:"IsRevealed"`
 	IsFlagged        bool   `json:"IsFlagged"`
 	FlaggedWith      string `json:"FlaggedWith"`
-	MinesSorrounding int    `json:"MineSorrounding"`
+	MinesSurrounding int    `json:"MinesSurrounding"`
+	Processed        bool
 }
 
 type CellGrid []Cell
