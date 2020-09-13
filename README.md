@@ -8,20 +8,22 @@ docker-compose up
 
 ## API endpoints
 
-* **127.0.0.1/** - [Get] Gets API version
+* **/** - [Get] Gets API version
 
-* **127.0.0.1/healthcheck** - [Get] Perform a basic app health check
+* **/game** - [Post] Start a new game with default parameters
 
-* **127.0.0.1/game** - [Post] Start a new game with default parameters
+* **/game/{gameID}/board/status** - [Post] Loads and retrieves actual game info
 
-* **127.0.0.1/game/{gameID}/board** - [Post] Loads and retrieves game info
+**/game/{gameID}/board/bombs** - [Post] Loads and retrieves game bombs location
 
-* **127.0.0.1/game/{gameID}/flag/{cellID}/question** - [Post] Flags a cell with a question mark or unflags 
+**/game/{gameID}/board/JSON** - [Post] Loads and retrieves game info and return in JSON format
+
+* **/game/{gameID}/flag/{cellID}/question** - [Post] Flags a cell with a question mark or unflags 
 it
 
-* **127.0.0.1/game/{gameID}/flag/{cellID}/flag** - [Post] Flags a cell with a red flag or unflags it
+* **/game/{gameID}/flag/{cellID}/flag** - [Post] Flags a cell with a red flag or unflags it
 
-* **127.0.0.1/game/{gameID}/click/{cellID}** - [Post] Clicks on a cell
+* **/game/{gameID}/click/{cellID}** - [Post] Clicks on a cell
 
 ## Run tests within Docker
 
